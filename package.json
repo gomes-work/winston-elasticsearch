@@ -33,6 +33,7 @@
     "logstash"
   ],
   "dependencies": {
+    "common-errors": "^1.0.0",
     "debug": "^2.4.4",
     "elasticsearch": "^12.1.3",
     "lodash": "^4.17.2",

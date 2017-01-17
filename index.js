@@ -8,6 +8,7 @@ const moment = require('moment');
 const _ = require('lodash');
 const retry = require('retry');
 const elasticsearch = require('elasticsearch');
+const errors = require('common-errors');
 
 const defaultTransformer = require('./transformer');
 const BulkWriter = require('./bulk_writer');
@@ -76,10 +77,17 @@ const Elasticsearch = function Elasticsearch(options) {
 
   this.bulkWriter = new BulkWriter(this.client,
       options.flushInterval, options.waitForActiveShards);
+  // Pass through bulk writer errors.
+  this.bulkWriter.on('error', (err) => {
+      this.emit('error', err);
+  });
   this.bulkWriter.start();
 
   // Conduct initial connection check (sets connection state for further use)
-  this.checkEsConnection().then((connectionOk) => {});
+  this.checkEsConnection()
+    .catch((err) => {
+      this.emit('error', err);
+    });
 
   return this;
 };
@@ -178,20 +186,27 @@ Elasticsearch.prototype.ensureMappingTemplate = function ensureMappingTemplate(f
     (res) => {
       fulfill(res);
     },
-    (res) => {
-      if (res.status && res.status === 404) {
-        const tmplMessage = {
-          name: 'template_' + thiz.options.indexPrefix,
-          create: true,
-          body: mappingTemplate
-        };
-        thiz.client.indices.putTemplate(tmplMessage).then(
-        (res1) => {
-          fulfill(res1);
-        },
-        (err1) => {
-          reject(err1);
-        });
+    (resOrError) => {
+      if (resOrError.status) {
+        // On 404 try to create the index and then retry.
+        if (resOrError.status === 404) {
+          const tmplMessage = {
+            name: 'template_' + thiz.options.indexPrefix,
+            create: true,
+            body: mappingTemplate
+          };
+          thiz.client.indices.putTemplate(tmplMessage).then(
+            (res1) => {
+              fulfill(res1);
+            },
+            (err1) => {
+              reject(err1);
+            });
+        } else {
+          thiz.emit('error', new errors.HttpStatusError(resOrError.status));
+        }
+      } else {
+        thiz.emit('error', resOrError);
       }
     });
 };
