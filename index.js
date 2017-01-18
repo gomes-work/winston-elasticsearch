@@ -79,7 +79,7 @@ const Elasticsearch = function Elasticsearch(options) {
       options.flushInterval, options.waitForActiveShards);
   // Pass through bulk writer errors.
   this.bulkWriter.on('error', (err) => {
-      this.emit('error', err);
+    this.emit('error', err);
   });
   this.bulkWriter.start();
 
